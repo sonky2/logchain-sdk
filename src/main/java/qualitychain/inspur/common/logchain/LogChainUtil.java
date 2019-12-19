@@ -12,10 +12,7 @@ import java.security.PrivateKey;
 import java.security.Signature;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.time.Clock;
-import java.util.Calendar;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Properties;
+import java.util.*;
 
 import org.apache.commons.codec.binary.Base64;
 import org.apache.http.HttpEntity;
@@ -35,8 +32,9 @@ import com.alibaba.fastjson.JSONObject;
 */
 @Component
 public class LogChainUtil {
-	private final static String prvKey;
-	private final static String requestUrl;
+	private static final Map<String,String> prvKeys = new HashMap<String, String>();
+	private static final String requestUrl;
+	private static final List<String> labelLevels = Arrays.asList("trace","debug","info","warn","error");
 	private static final String SHA_256 = "SHA-256";
 	private static final String CHARSET = "UTF-8";
 	private static final char strUpper[] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
@@ -56,14 +54,37 @@ public class LogChainUtil {
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
-    	 prvKey = prop.getProperty("privateKey");
     	 requestUrl = prop.getProperty("requestUrl");
+		Enumeration<?> e = prop.propertyNames();
+		while(e.hasMoreElements()) {
+			String key = (String)e.nextElement();
+			if(key.contains(".")) {
+				if(key.substring(0,key.indexOf(".")).equals("privateKey")){
+					String labelId = key.substring(key.indexOf(".") + 1);
+					prvKeys.put(labelId, prop.getProperty(key));
+				}
+			}
+		}
     }
-	public static Map<String, Object> logChain(String label,String userId,String logTxt) throws Exception {
+    public static Map<String,Object> logChainDefaultLevel(String label,String userId,String logTxt) throws Exception {
+    	return logChain(label,userId,logTxt,"trace");
+	}
+	public static Map<String, Object> logChain(String label,String userId,String logTxt,String level) throws Exception {
 		String nodeId = getPid();
 		Calendar.getInstance().getTimeInMillis();
 		long createdt = Clock.systemDefaultZone().millis();
-		String txHash = sha256(userId + label + nodeId + createdt + logTxt).toString();
+		String txHash = sha256(userId + label + nodeId + createdt + logTxt+level).toString();
+		if(!prvKeys.containsKey(label)) {
+			Map<String,Object> result = new HashMap<String, Object>();
+			result.put("msg","标签没有对应的私钥");
+			return result;
+		}
+		if(!labelLevels.contains(level)) {
+			Map<String,Object> result = new HashMap<String,Object>();
+			result.put("msg","没有对应的日志级别，请使用trace,debug,info,warn,error其中的一个");
+			return result;
+		}
+		String prvKey = prvKeys.get(label);
 		PrivateKey privateKey = getPrivateKey(prvKey, 1);
 		String signature = sign(txHash, privateKey, PARAM_FORMAT_HEX);
 		// 获得Http客户端(可以理解为:你得先有一个浏览器;注意:实际上HttpClient与浏览器是不一样的)
@@ -79,6 +100,7 @@ public class LogChainUtil {
 		params.put("log_txt", logTxt);
 		params.put("txHash", txHash);
 		params.put("signature", signature);
+		params.put("level",level);
 		StringEntity sEntity = new StringEntity(JSONObject.toJSONString(params), "utf-8");
 		sEntity.setContentType("application/json");
 		sEntity.setContentEncoding("utf-8");
