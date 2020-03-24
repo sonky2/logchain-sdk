@@ -104,7 +104,7 @@ public class LogChainUtil {
 		StringEntity sEntity = new StringEntity(JSONObject.toJSONString(params), "utf-8");
 		sEntity.setContentType("application/json");
 		sEntity.setContentEncoding("utf-8");
-		HttpPost httpPost = new HttpPost(requestUrl + "/bas/logchain/put/logs");
+		HttpPost httpPost = new HttpPost(requestUrl + "/logchain/put/logs");
 		// 设置ContentType(注:如果只是传普通参数的话,ContentType不一定非要用application/json)
 		httpPost.setHeader("Content-Type", "application/json;charset=utf-8");
 		httpPost.setEntity(sEntity);
